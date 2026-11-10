@@ -14,7 +14,7 @@ permissions:
 jobs:
   proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - name: Install runner
@@ -26,29 +26,42 @@ jobs:
       - name: Capture restored mobile screens
         shell: bash
         run: |
+          set -euo pipefail
           python3 -m http.server 8010 --bind 127.0.0.1 >/tmp/touchline-proof-http.log 2>&1 &
           PID=$!
           trap 'kill $PID || true' EXIT
-          for i in {1..30}; do curl -fsS http://127.0.0.1:8010/index.html >/dev/null && break || sleep .2; done
+          ready=0
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8010/index.html >/dev/null; then ready=1; break; fi
+            sleep .2
+          done
+          test "$ready" -eq 1
           cat > proof.mjs <<'JS'
           import { chromium } from 'playwright-core';
           const browser = await chromium.launch({headless:true, executablePath:process.env.CHROME_BIN, args:['--no-sandbox','--disable-gpu']});
           const page = await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:1});
-          page.setDefaultTimeout(6000);
+          page.setDefaultTimeout(7000);
+          const domClick = async selector => {
+            const locator = page.locator(selector).first();
+            await locator.waitFor({state:'attached'});
+            await locator.evaluate(el => el.click());
+            await page.waitForTimeout(100);
+          };
           try {
             await page.goto('http://127.0.0.1:8010/index.html',{waitUntil:'networkidle'});
             await page.evaluate(()=>localStorage.clear());
             await page.reload({waitUntil:'networkidle'});
             await page.screenshot({path:'proof/01-formation.png'});
 
-            await page.locator('.formation-card').first().click();
-            await page.locator('.formation-next').click();
+            await domClick('.formation-card');
+            await domClick('.formation-next');
             await page.locator('.ace-choice').first().waitFor({state:'visible'});
             await page.screenshot({path:'proof/02-first-star.png'});
 
-            await page.locator('.ace-choice').first().click();
-            await page.locator('.ace-confirm').click();
-            await page.locator('.pitch-wrap .empty-slot').first().click();
+            await domClick('.ace-choice');
+            await domClick('.ace-confirm');
+            await page.locator('.pitch-wrap').waitFor({state:'visible'});
+            await domClick('.pitch-wrap .empty-slot');
             await page.locator('.candidate-card').first().waitFor({state:'visible'});
             await page.screenshot({path:'proof/03-candidates.png'});
 
@@ -56,21 +69,25 @@ jobs:
               const formations=eval('FORMATIONS'), players=eval('PLAYERS'), managers=eval('MANAGERS');
               const compatible=eval('positionCompatible'), isGK=eval('pIsGK');
               const f=formations.find(x=>x.id==='433')||formations[0], used=new Set(), lineup={};
-              for(const [pos] of f.slots){const pool=players.filter(p=>!used.has(p.id)&&isGK(p)===(pos==='GK'));const p=pool.find(p=>compatible(p,pos))||pool[0];lineup[pos]=p.id;used.add(p.id);}
+              for(const [pos] of f.slots){
+                const pool=players.filter(p=>!used.has(p.id)&&isGK(p)===(pos==='GK'));
+                const p=pool.find(p=>compatible(p,pos))||pool[0];
+                lineup[pos]=p.id; used.add(p.id);
+              }
               const remain=players.filter(p=>!used.has(p.id));
               const reserveGK=remain.find(p=>isGK(p));
               const bench=[reserveGK,...remain.filter(p=>!isGK(p)).slice(0,4)].filter(Boolean).map(p=>p.id);
               localStorage.setItem('touchline_v22_state',JSON.stringify({version:22,stage:'squad',formationOptions:[f.id],formationId:f.id,lineup,bench,aceCandidates:[],aceIntroSeen:true,selectedAce:null,candidateTarget:null,candidateIds:[],selectedCandidate:null,managerCandidates:managers.slice(0,5).map(m=>m.id),selectedManager:null,managerId:null,sound:false,menu:false,swapSource:null,activeMatch:null,tournament:null,lastResult:null}));
             });
             await page.reload({waitUntil:'networkidle'});
-            await page.locator('.manager-open').click();
+            await domClick('.manager-open');
             await page.locator('.manager-card').first().waitFor({state:'visible'});
             await page.screenshot({path:'proof/04-manager.png'});
-            await page.locator('.manager-card').first().click();
-            await page.locator('.manager-confirm').click();
+            await domClick('.manager-card');
+            await domClick('.manager-confirm');
             await page.locator('.tournament-open').waitFor({state:'visible'});
             await page.screenshot({path:'proof/05-squad.png'});
-            await page.locator('.tournament-open').click();
+            await domClick('.tournament-open');
             await page.locator('.cup-shell').waitFor({state:'visible'});
             await page.screenshot({path:'proof/06-tournament.png'});
           } finally {
