@@ -23,7 +23,8 @@ jobs:
         run: |
           set -euo pipefail
           cat \
-            payload/v22-00.txt \
+            payload/v22-00a.txt \
+            payload/v22-00b.txt \
             payload/v22-01.txt \
             payload/v22-02.txt \
             payload/v22-03.txt \
