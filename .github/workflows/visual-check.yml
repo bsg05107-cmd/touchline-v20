@@ -51,6 +51,7 @@ jobs:
             args: ['--no-sandbox', '--disable-gpu']
           });
           const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+          page.setDefaultTimeout(7000);
           page.on('console', msg => console.log('BROWSER', msg.type(), msg.text()));
           page.on('pageerror', err => console.log('PAGEERROR', err.message));
           await page.goto('http://127.0.0.1:8000/index.html', { waitUntil: 'networkidle' });
@@ -61,32 +62,48 @@ jobs:
           await page.locator('.formation-card').first().click();
           await page.locator('.formation-next').click();
           await page.waitForTimeout(100);
-          if (await page.locator('.ace-open').count()) {
-            await page.locator('.ace-open').evaluate(el => el.click());
-          }
-          await page.locator('.ace-choice').first().waitFor({ state: 'visible', timeout: 5000 });
+          if (await page.locator('.ace-open').count()) await page.locator('.ace-open').evaluate(el => el.click());
+          await page.locator('.ace-choice').first().waitFor({ state: 'visible' });
           await page.screenshot({ path: 'visual/02-first-star.png' });
 
           await page.locator('.ace-choice').first().click();
           await page.locator('.ace-confirm').click();
           await page.locator('.pitch-wrap').waitFor({ state: 'visible' });
+          await page.locator('.pitch-wrap .empty-slot').first().click();
+          await page.locator('.candidate-card').first().waitFor({ state: 'visible' });
+          await page.screenshot({ path: 'visual/03-candidates.png' });
+          await page.locator('.sheet-close').click();
 
-          for (let i = 0; i < 10; i++) {
-            await page.locator('.pitch-wrap .empty-slot').first().click();
-            await page.locator('.candidate-card').first().waitFor({ state: 'visible' });
-            if (i === 0) await page.screenshot({ path: 'visual/03-candidates.png' });
-            await page.locator('.candidate-card').first().click();
-            await page.locator('.candidate-confirm').click();
-            await page.locator('.candidate-sheet').waitFor({ state: 'detached' });
-          }
-
-          for (let i = 0; i < 5; i++) {
-            await page.locator('.bench .empty-bench').first().click();
-            await page.locator('.candidate-card').first().waitFor({ state: 'visible' });
-            await page.locator('.candidate-card').first().click();
-            await page.locator('.candidate-confirm').click();
-            await page.locator('.candidate-sheet').waitFor({ state: 'detached' });
-          }
+          await page.evaluate(() => {
+            const formations = eval('FORMATIONS');
+            const players = eval('PLAYERS');
+            const managers = eval('MANAGERS');
+            const compatible = eval('positionCompatible');
+            const isGK = eval('pIsGK');
+            const f = formations.find(x => x.id === '433') || formations[0];
+            const used = new Set();
+            const lineup = {};
+            for (const [pos] of f.slots) {
+              const wantGK = pos === 'GK';
+              const pool = players.filter(p => !used.has(p.id) && isGK(p) === wantGK);
+              const p = pool.find(p => compatible(p, pos)) || pool[0];
+              lineup[pos] = p.id;
+              used.add(p.id);
+            }
+            const remain = players.filter(p => !used.has(p.id));
+            const reserveGK = remain.find(p => isGK(p));
+            const bench = [reserveGK, ...remain.filter(p => !isGK(p)).slice(0, 4)].filter(Boolean).map(p => p.id);
+            const state = {
+              version:22, stage:'squad', formationOptions:[f.id], formationId:f.id,
+              lineup, bench, aceCandidates:[], aceIntroSeen:true, selectedAce:null,
+              candidateTarget:null, candidateIds:[], selectedCandidate:null,
+              managerCandidates:managers.slice(0,5).map(m=>m.id), selectedManager:null,
+              managerId:null, sound:false, menu:false, swapSource:null,
+              activeMatch:null, tournament:null, lastResult:null
+            };
+            localStorage.setItem('touchline_v22_state', JSON.stringify(state));
+          });
+          await page.reload({ waitUntil: 'networkidle' });
 
           await page.locator('.manager-open').click();
           await page.locator('.manager-card').first().waitFor({ state: 'visible' });
