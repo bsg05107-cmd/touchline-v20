@@ -36,12 +36,14 @@ jobs:
           python3 -m http.server 8000 --bind 127.0.0.1 >/tmp/touchline-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
-          for i in {1..20}; do
-            curl -fsS http://127.0.0.1:8000/index.html >/dev/null && break
+          ready=0
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8000/index.html >/dev/null; then ready=1; break; fi
             sleep .25
           done
+          test "$ready" -eq 1
 
-          cat > /tmp/visual-check.mjs <<'JS'
+          cat > visual-check.mjs <<'JS'
           import { chromium } from 'playwright-core';
           const browser = await chromium.launch({
             headless: true,
@@ -92,7 +94,7 @@ jobs:
           await browser.close();
           JS
 
-          node /tmp/visual-check.mjs
+          node ./visual-check.mjs
 
       - name: Upload visual evidence
         uses: actions/upload-artifact@v4
