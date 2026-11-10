@@ -391,7 +391,7 @@ function formationById(id){return FORMATIONS.find(f=>f.id===id);}
 <script>
 (() => {
 'use strict';
-const STORE_KEY='touchline_v22_state';
+const STORE_KEY='touchline_classic_v24_state';
 const app=document.getElementById('app');
 const toastEl=document.getElementById('toast');
 let audioCtx=null, toastTimer=null, playbackTimers=[];
@@ -405,8 +405,8 @@ function escapeHtml(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;',
 function toast(msg){clearTimeout(toastTimer);toastEl.textContent=msg;toastEl.classList.add('show');toastTimer=setTimeout(()=>toastEl.classList.remove('show'),1800);}
 function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(state));}catch(e){}}
 function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY)||'null');}catch(e){return null;}}
-function freshState(){return {version:22,stage:'formation',formationOptions:sample(FORMATIONS.map(f=>f.id),3),formationId:null,lineup:{},bench:Array(5).fill(null),aceCandidates:[],aceIntroSeen:false,selectedAce:null,candidateTarget:null,candidateIds:[],selectedCandidate:null,managerCandidates:[],selectedManager:null,managerId:null,sound:true,menu:false,swapSource:null,activeMatch:null,tournament:null,lastResult:null};}
-let state=load(); if(!state||state.version!==22) state=freshState();
+function freshState(){return {version:24,stage:'formation',formationOptions:sample(FORMATIONS.map(f=>f.id),3),formationId:null,lineup:{},bench:Array(5).fill(null),aceCandidates:[],aceIntroSeen:false,selectedAce:null,candidateTarget:null,candidateIds:[],selectedCandidate:null,managerCandidates:[],selectedManager:null,managerId:null,sound:true,menu:false,swapSource:null,activeMatch:null,tournament:null,lastResult:null};}
+let state=load(); if(!state||state.version!==24) state=freshState();
 
 function initAudio(){if(!audioCtx){try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(audioCtx?.state==='suspended')audioCtx.resume();}
 function tone(freq=440,dur=.07,type='sine',gain=.035,delay=0){if(!state.sound)return;initAudio();if(!audioCtx)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime+delay);g.gain.setValueAtTime(.0001,audioCtx.currentTime+delay);g.gain.exponentialRampToValueAtTime(gain,audioCtx.currentTime+delay+.008);g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+delay+dur);o.connect(g).connect(audioCtx.destination);o.start(audioCtx.currentTime+delay);o.stop(audioCtx.currentTime+delay+dur+.02);}
