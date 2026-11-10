@@ -1,12 +1,10 @@
-name: Build TOUCHLINE game
+name: Build TOUCHLINE legacy exact
 
 on:
   push:
     branches: [main]
     paths:
-      - 'payload/v22-*.txt'
-      - 'classic-v23.css'
-      - 'classic-v23.js'
+      - 'payload/legacy18-*.txt'
       - '.github/workflows/build-game.yml'
   workflow_dispatch:
 
@@ -21,75 +19,31 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Reconstruct verified base game
+      - name: Reconstruct and verify old-look game
         shell: bash
         run: |
           set -euo pipefail
           cat \
-            payload/v22-00a.txt \
-            payload/v22-00b.txt \
-            payload/v22-01.txt \
-            payload/v22-02.txt \
-            payload/v22-03.txt \
-            payload/v22-04.txt \
-            payload/v22-05.txt \
+            payload/legacy18-00.txt \
+            payload/legacy18-01.txt \
+            payload/legacy18-02.txt \
+            payload/legacy18-03.txt \
+            payload/legacy18-04.txt \
+            payload/legacy18-05.txt \
             | tr -d '\r\n' \
             | base64 --decode \
             | gzip --decompress \
             > index.html
 
-          echo '5fa2c26e1b08602b5073650086eb2deeb294fe14b2c1858747715047fdb158a6  index.html' | sha256sum --check --strict
-          grep -q '<title>TOUCHLINE v22 — Draft Cup</title>' index.html
-          test "$(wc -c < index.html)" -eq 107240
+          echo '43de39c738e1ed4a4a8eb8e441b0e17f11562a8a848b8debfb2431209ca88985  index.html' | sha256sum --check --strict
+          test "$(wc -c < index.html)" -eq 122047
+          grep -q '<title>TOUCHLINE Legacy v18 — Draft Cup</title>' index.html
+          grep -q 'data-touchline-version="legacy-v18-exact"' index.html
+          grep -q 'touchline_legacy_v18_exact_state' index.html
+          grep -q 'legacy-ace-card' index.html
+          grep -q 'legacy-round-progress' index.html
 
-      - name: Inline and enforce classic early-look interface
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('index.html')
-          html = path.read_text(encoding='utf-8')
-          css = Path('classic-v23.css').read_text(encoding='utf-8')
-          js = Path('classic-v23.js').read_text(encoding='utf-8')
-
-          replacements = [
-              ('<title>TOUCHLINE v22 — Draft Cup</title>', '<title>TOUCHLINE Classic v24 — Draft Cup</title>'),
-              ("const STORE_KEY='touchline_v22_state';", "const STORE_KEY='touchline_classic_v24_state';"),
-              ("function freshState(){return {version:22,", "function freshState(){return {version:24,"),
-              ("if(!state||state.version!==22) state=freshState();", "if(!state||state.version!==24) state=freshState();"),
-          ]
-          for old, new in replacements:
-              if old not in html:
-                  raise SystemExit(f'source signature not found: {old}')
-              html = html.replace(old, new, 1)
-
-          old_begin = "function beginAce(){if(!state.formationId)return;state.aceCandidates=availableAceCandidates();state.selectedAce=null;state.stage='aceIntro';save();sfx('select');render();}"
-          new_begin = "function beginAce(){if(!state.formationId)return;state.aceCandidates=availableAceCandidates();state.selectedAce=null;state.aceIntroSeen=true;state.stage='aceChoice';save();sfx('select');render();}"
-          if old_begin not in html:
-              raise SystemExit('beginAce source signature not found')
-          html = html.replace(old_begin, new_begin, 1)
-
-          inline_style = '\n<style id="touchline-classic-v24">\n/* TOUCHLINE CLASSIC INLINE v24 */\n' + css + '\n</style>\n'
-          inline_script = '\n<script id="touchline-classic-runtime-v24">\n' + js + '\n</script>\n'
-          html = html.replace('</head>', inline_style + '</head>', 1)
-          html = html.replace('</body>', inline_script + '</body>', 1)
-          path.write_text(html, encoding='utf-8')
-          PY
-
-          grep -q 'TOUCHLINE CLASSIC INLINE v24' index.html
-          grep -q 'touchline-classic-runtime-v24' index.html
-          grep -q "state.stage='aceChoice'" index.html
-          grep -q "const STORE_KEY='touchline_classic_v24_state'" index.html
-          grep -q 'version:24' index.html
-          grep -q '<title>TOUCHLINE Classic v24 — Draft Cup</title>' index.html
-          if grep -q 'classic-v23.css?v=23' index.html; then
-            echo 'Unexpected external classic stylesheet reference' >&2
-            exit 1
-          fi
-
-      - name: Commit verified game
+      - name: Commit verified restored version
         shell: bash
         run: |
           set -euo pipefail
@@ -100,5 +54,5 @@ jobs:
             echo 'Verified game is already current.'
             exit 0
           fi
-          git commit -m 'Build TOUCHLINE Classic v24 fresh restored interface'
+          git commit -m 'Restore exact pre-v20 TOUCHLINE interface'
           git push
