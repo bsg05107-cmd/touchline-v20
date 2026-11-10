@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'payload/v22-*.txt'
+      - 'classic-v23.css'
+      - 'classic-v23.js'
       - '.github/workflows/build-game.yml'
   workflow_dispatch:
 
@@ -18,7 +20,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Reconstruct and verify game
+      - name: Reconstruct verified base game
         shell: bash
         run: |
           set -euo pipefail
@@ -37,8 +39,37 @@ jobs:
 
           echo '5fa2c26e1b08602b5073650086eb2deeb294fe14b2c1858747715047fdb158a6  index.html' | sha256sum --check --strict
           grep -q '<title>TOUCHLINE v22 — Draft Cup</title>' index.html
-          grep -q 'EARLY LOOK RESTORATION' index.html
           test "$(wc -c < index.html)" -eq 107240
+
+      - name: Apply classic early-look interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('index.html')
+          html = path.read_text(encoding='utf-8')
+          html = html.replace(
+              '<title>TOUCHLINE v22 — Draft Cup</title>',
+              '<title>TOUCHLINE Classic v23 — Draft Cup</title>',
+              1,
+          )
+          html = html.replace(
+              '</head>',
+              '<link rel="stylesheet" href="./classic-v23.css?v=23">\n</head>',
+              1,
+          )
+          html = html.replace(
+              '</body>',
+              '<script src="./classic-v23.js?v=23"></script>\n</body>',
+              1,
+          )
+          path.write_text(html, encoding='utf-8')
+          PY
+
+          grep -q 'classic-v23.css?v=23' index.html
+          grep -q 'classic-v23.js?v=23' index.html
+          grep -q '<title>TOUCHLINE Classic v23 — Draft Cup</title>' index.html
 
       - name: Commit verified game
         shell: bash
@@ -51,5 +82,5 @@ jobs:
             echo 'Verified game is already current.'
             exit 0
           fi
-          git commit -m 'Build verified TOUCHLINE v22 restored UI'
+          git commit -m 'Build TOUCHLINE Classic v23 interface'
           git push
