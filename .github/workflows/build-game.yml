@@ -54,11 +54,16 @@ jobs:
           css = Path('classic-v23.css').read_text(encoding='utf-8')
           js = Path('classic-v23.js').read_text(encoding='utf-8')
 
-          html = html.replace(
-              '<title>TOUCHLINE v22 — Draft Cup</title>',
-              '<title>TOUCHLINE Classic v24 — Draft Cup</title>',
-              1,
-          )
+          replacements = [
+              ('<title>TOUCHLINE v22 — Draft Cup</title>', '<title>TOUCHLINE Classic v24 — Draft Cup</title>'),
+              ("const STORE_KEY='touchline_v22_state';", "const STORE_KEY='touchline_classic_v24_state';"),
+              ("function freshState(){return {version:22,", "function freshState(){return {version:24,"),
+              ("if(!state||state.version!==22) state=freshState();", "if(!state||state.version!==24) state=freshState();"),
+          ]
+          for old, new in replacements:
+              if old not in html:
+                  raise SystemExit(f'source signature not found: {old}')
+              html = html.replace(old, new, 1)
 
           old_begin = "function beginAce(){if(!state.formationId)return;state.aceCandidates=availableAceCandidates();state.selectedAce=null;state.stage='aceIntro';save();sfx('select');render();}"
           new_begin = "function beginAce(){if(!state.formationId)return;state.aceCandidates=availableAceCandidates();state.selectedAce=null;state.aceIntroSeen=true;state.stage='aceChoice';save();sfx('select');render();}"
@@ -76,6 +81,8 @@ jobs:
           grep -q 'TOUCHLINE CLASSIC INLINE v24' index.html
           grep -q 'touchline-classic-runtime-v24' index.html
           grep -q "state.stage='aceChoice'" index.html
+          grep -q "const STORE_KEY='touchline_classic_v24_state'" index.html
+          grep -q 'version:24' index.html
           grep -q '<title>TOUCHLINE Classic v24 — Draft Cup</title>' index.html
           if grep -q 'classic-v23.css?v=23' index.html; then
             echo 'Unexpected external classic stylesheet reference' >&2
@@ -93,5 +100,5 @@ jobs:
             echo 'Verified game is already current.'
             exit 0
           fi
-          git commit -m 'Build TOUCHLINE Classic v24 restored interface'
+          git commit -m 'Build TOUCHLINE Classic v24 fresh restored interface'
           git push
