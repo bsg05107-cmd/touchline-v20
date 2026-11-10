@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'payload/**'
+      - 'payload/v22.txt'
       - '.github/workflows/build-game.yml'
   workflow_dispatch:
 
@@ -22,23 +22,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat \
-            payload/v21-p0-0.txt \
-            payload/v21-p0-1.txt \
-            payload/v21-p0-2.txt \
-            payload/v21-p0-3.txt \
-            payload/part-01.txt \
-            payload/part-02-03.txt \
-            payload/part-04-05.txt \
-            payload/part-06-07.txt \
-            | tr -d '\r\n' \
+          tr -d '\r\n' < payload/v22.txt \
             | base64 --decode \
             | gzip --decompress \
             > index.html
 
-          echo '94399d018c47443446d1e493b8f3e6d7a4efe0156ae63555be1fe5007a7681a9  index.html' | sha256sum --check --strict
-          grep -q '<title>TOUCHLINE v21 — Draft Cup</title>' index.html
-          test "$(wc -c < index.html)" -eq 117193
+          echo '5fa2c26e1b08602b5073650086eb2deeb294fe14b2c1858747715047fdb158a6  index.html' | sha256sum --check --strict
+          grep -q '<title>TOUCHLINE v22 — Draft Cup</title>' index.html
+          grep -q 'EARLY LOOK RESTORATION' index.html
+          test "$(wc -c < index.html)" -eq 107240
 
       - name: Commit verified game
         shell: bash
@@ -51,5 +43,5 @@ jobs:
             echo 'Verified game is already current.'
             exit 0
           fi
-          git commit -m 'Build verified TOUCHLINE v21 game'
+          git commit -m 'Build verified TOUCHLINE v22 restored UI'
           git push
