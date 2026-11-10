@@ -51,6 +51,8 @@ jobs:
             args: ['--no-sandbox', '--disable-gpu']
           });
           const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+          page.on('console', msg => console.log('BROWSER', msg.type(), msg.text()));
+          page.on('pageerror', err => console.log('PAGEERROR', err.message));
           await page.goto('http://127.0.0.1:8000/index.html', { waitUntil: 'networkidle' });
           await page.evaluate(() => localStorage.clear());
           await page.reload({ waitUntil: 'networkidle' });
@@ -58,6 +60,10 @@ jobs:
 
           await page.locator('.formation-card').first().click();
           await page.locator('.formation-next').click();
+          await page.waitForTimeout(100);
+          if (await page.locator('.ace-open').count()) {
+            await page.locator('.ace-open').evaluate(el => el.click());
+          }
           await page.locator('.ace-choice').first().waitFor({ state: 'visible', timeout: 5000 });
           await page.screenshot({ path: 'visual/02-first-star.png' });
 
@@ -66,18 +72,20 @@ jobs:
           await page.locator('.pitch-wrap').waitFor({ state: 'visible' });
 
           for (let i = 0; i < 10; i++) {
-            const empty = page.locator('.pitch-wrap .empty-slot').first();
-            await empty.click();
+            await page.locator('.pitch-wrap .empty-slot').first().click();
             await page.locator('.candidate-card').first().waitFor({ state: 'visible' });
             if (i === 0) await page.screenshot({ path: 'visual/03-candidates.png' });
             await page.locator('.candidate-card').first().click();
             await page.locator('.candidate-confirm').click();
+            await page.locator('.candidate-sheet').waitFor({ state: 'detached' });
           }
 
           for (let i = 0; i < 5; i++) {
             await page.locator('.bench .empty-bench').first().click();
+            await page.locator('.candidate-card').first().waitFor({ state: 'visible' });
             await page.locator('.candidate-card').first().click();
             await page.locator('.candidate-confirm').click();
+            await page.locator('.candidate-sheet').waitFor({ state: 'detached' });
           }
 
           await page.locator('.manager-open').click();
@@ -97,9 +105,10 @@ jobs:
           node ./visual-check.mjs
 
       - name: Upload visual evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: touchline-classic-v23-visual
           path: visual/*.png
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
