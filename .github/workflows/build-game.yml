@@ -16,6 +16,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -41,35 +42,45 @@ jobs:
           grep -q '<title>TOUCHLINE v22 — Draft Cup</title>' index.html
           test "$(wc -c < index.html)" -eq 107240
 
-      - name: Apply classic early-look interface
+      - name: Inline and enforce classic early-look interface
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+
           path = Path('index.html')
           html = path.read_text(encoding='utf-8')
+          css = Path('classic-v23.css').read_text(encoding='utf-8')
+          js = Path('classic-v23.js').read_text(encoding='utf-8')
+
           html = html.replace(
               '<title>TOUCHLINE v22 — Draft Cup</title>',
-              '<title>TOUCHLINE Classic v23 — Draft Cup</title>',
+              '<title>TOUCHLINE Classic v24 — Draft Cup</title>',
               1,
           )
-          html = html.replace(
-              '</head>',
-              '<link rel="stylesheet" href="./classic-v23.css?v=23">\n</head>',
-              1,
-          )
-          html = html.replace(
-              '</body>',
-              '<script src="./classic-v23.js?v=23"></script>\n</body>',
-              1,
-          )
+
+          old_begin = "function beginAce(){if(!state.formationId)return;state.aceCandidates=availableAceCandidates();state.selectedAce=null;state.stage='aceIntro';save();sfx('select');render();}"
+          new_begin = "function beginAce(){if(!state.formationId)return;state.aceCandidates=availableAceCandidates();state.selectedAce=null;state.aceIntroSeen=true;state.stage='aceChoice';save();sfx('select');render();}"
+          if old_begin not in html:
+              raise SystemExit('beginAce source signature not found')
+          html = html.replace(old_begin, new_begin, 1)
+
+          inline_style = '\n<style id="touchline-classic-v24">\n/* TOUCHLINE CLASSIC INLINE v24 */\n' + css + '\n</style>\n'
+          inline_script = '\n<script id="touchline-classic-runtime-v24">\n' + js + '\n</script>\n'
+          html = html.replace('</head>', inline_style + '</head>', 1)
+          html = html.replace('</body>', inline_script + '</body>', 1)
           path.write_text(html, encoding='utf-8')
           PY
 
-          grep -q 'classic-v23.css?v=23' index.html
-          grep -q 'classic-v23.js?v=23' index.html
-          grep -q '<title>TOUCHLINE Classic v23 — Draft Cup</title>' index.html
+          grep -q 'TOUCHLINE CLASSIC INLINE v24' index.html
+          grep -q 'touchline-classic-runtime-v24' index.html
+          grep -q "state.stage='aceChoice'" index.html
+          grep -q '<title>TOUCHLINE Classic v24 — Draft Cup</title>' index.html
+          if grep -q 'classic-v23.css?v=23' index.html; then
+            echo 'Unexpected external classic stylesheet reference' >&2
+            exit 1
+          fi
 
       - name: Commit verified game
         shell: bash
@@ -82,5 +93,5 @@ jobs:
             echo 'Verified game is already current.'
             exit 0
           fi
-          git commit -m 'Build TOUCHLINE Classic v23 interface'
+          git commit -m 'Build TOUCHLINE Classic v24 restored interface'
           git push
