@@ -1,11 +1,6 @@
 name: Build TOUCHLINE game
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'payload/**'
-      - '.github/workflows/build-game.yml'
   workflow_dispatch:
 
 permissions:
@@ -48,5 +43,5 @@ jobs:
             echo 'Verified game is already current.'
             exit 0
           fi
-          git commit -m 'Build verified TOUCHLINE v20 game'
+          git commit -m 'Build verified TOUCHLINE game'
           git push
