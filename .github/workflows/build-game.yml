@@ -1,6 +1,11 @@
 name: Build TOUCHLINE game
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'payload/**'
+      - '.github/workflows/build-game.yml'
   workflow_dispatch:
 
 permissions:
@@ -28,9 +33,9 @@ jobs:
             | gzip --decompress \
             > index.html
 
-          echo 'ab9fa245941b1fafdb7a9e85fcb1d893ac89ef244342c4ab6a8a909fd1cff816  index.html' | sha256sum --check --strict
-          grep -q '<title>TOUCHLINE — Draft Cup</title>' index.html
-          test "$(wc -c < index.html)" -eq 94101
+          echo '94399d018c47443446d1e493b8f3e6d7a4efe0156ae63555be1fe5007a7681a9  index.html' | sha256sum --check --strict
+          grep -q '<title>TOUCHLINE v21 — Draft Cup</title>' index.html
+          test "$(wc -c < index.html)" -eq 117193
 
       - name: Commit verified game
         shell: bash
@@ -43,5 +48,5 @@ jobs:
             echo 'Verified game is already current.'
             exit 0
           fi
-          git commit -m 'Build verified TOUCHLINE game'
+          git commit -m 'Build verified TOUCHLINE v21 game'
           git push
