@@ -1,0 +1,142 @@
+name: Recover legacy TOUCHLINE pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-legacy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare browser capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright-core
+          CHROME_BIN="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
+          mkdir -p legacy/raw legacy/browser legacy/assets
+
+      - name: Fetch raw legacy pages
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          urls=(
+            'https://touchline-draft-6k2m.hkkim1937.chatgpt.site/'
+            'https://touchline-draft-6k2m.hkkim1937.chatgpt.site/play-0.17.1.html'
+            'https://touchline-draft-6k2m.hkkim1937.chatgpt.site/play-0.18.0.html'
+          )
+          names=('root' 'v0.17.1' 'v0.18.0')
+          for i in 0 1 2; do
+            curl -L --compressed --connect-timeout 15 --max-time 45 \
+              -D "legacy/raw/${names[$i]}.headers.txt" \
+              -o "legacy/raw/${names[$i]}.html" \
+              -w 'url=%{url_effective}\nstatus=%{http_code}\ntype=%{content_type}\nsize=%{size_download}\n' \
+              "${urls[$i]}" > "legacy/raw/${names[$i]}.meta.txt" 2> "legacy/raw/${names[$i]}.curl-error.txt"
+          done
+          exit 0
+
+      - name: Capture rendered legacy pages and assets
+        shell: bash
+        continue-on-error: true
+        run: |
+          cat > recover-legacy.mjs <<'JS'
+          import { chromium } from 'playwright-core';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import crypto from 'node:crypto';
+
+          const targets = [
+            {name:'root', url:'https://touchline-draft-6k2m.hkkim1937.chatgpt.site/'},
+            {name:'v0.17.1', url:'https://touchline-draft-6k2m.hkkim1937.chatgpt.site/play-0.17.1.html'},
+            {name:'v0.18.0', url:'https://touchline-draft-6k2m.hkkim1937.chatgpt.site/play-0.18.0.html'},
+          ];
+
+          fs.mkdirSync('legacy/browser', {recursive:true});
+          fs.mkdirSync('legacy/assets', {recursive:true});
+          const browser = await chromium.launch({
+            headless:true,
+            executablePath:process.env.CHROME_BIN,
+            args:['--no-sandbox','--disable-gpu','--disable-dev-shm-usage']
+          });
+          const context = await browser.newContext({
+            viewport:{width:390,height:844},
+            deviceScaleFactor:1,
+            userAgent:'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/157 Mobile Safari/537.36'
+          });
+          const manifest=[];
+
+          for (const target of targets) {
+            const page = await context.newPage();
+            const logs=[];
+            const requests=[];
+            const savedAssets=[];
+            page.on('console', m => logs.push({type:m.type(), text:m.text()}));
+            page.on('pageerror', e => logs.push({type:'pageerror', text:e.message}));
+            page.on('requestfailed', req => logs.push({type:'requestfailed', text:`${req.url()} :: ${req.failure()?.errorText||''}`}));
+            page.on('response', async res => {
+              const req=res.request();
+              const rec={url:res.url(), status:res.status(), type:req.resourceType(), contentType:res.headers()['content-type']||''};
+              requests.push(rec);
+              if (!['stylesheet','script','xhr','fetch'].includes(req.resourceType()) || res.status() >= 400) return;
+              try {
+                const body=await res.body();
+                const ext=(rec.contentType.includes('css')?'.css':rec.contentType.includes('javascript')||rec.contentType.includes('ecmascript')?'.js':'.bin');
+                const hash=crypto.createHash('sha1').update(res.url()).digest('hex').slice(0,12);
+                const file=`legacy/assets/${target.name}-${hash}${ext}`;
+                fs.writeFileSync(file,body);
+                savedAssets.push({url:res.url(),file:path.basename(file),bytes:body.length,contentType:rec.contentType});
+              } catch {}
+            });
+
+            const meta={name:target.name,requestedUrl:target.url};
+            try {
+              const response=await page.goto(target.url,{waitUntil:'domcontentloaded',timeout:45000});
+              meta.status=response?.status() ?? null;
+              await page.waitForTimeout(5000);
+              meta.finalUrl=page.url();
+              meta.title=await page.title();
+              meta.bodyText=(await page.locator('body').innerText().catch(()=>'' )).slice(0,20000);
+              meta.localStorage=await page.evaluate(()=>Object.fromEntries(Object.entries(localStorage))).catch(()=>({}));
+              meta.sessionStorage=await page.evaluate(()=>Object.fromEntries(Object.entries(sessionStorage))).catch(()=>({}));
+              meta.performance=await page.evaluate(()=>performance.getEntriesByType('resource').map(x=>({name:x.name,initiatorType:x.initiatorType,transferSize:x.transferSize}))).catch(()=>[]);
+              fs.writeFileSync(`legacy/browser/${target.name}.rendered.html`,await page.content());
+              await page.screenshot({path:`legacy/browser/${target.name}.png`,fullPage:true});
+              await page.screenshot({path:`legacy/browser/${target.name}-viewport.png`,fullPage:false});
+              meta.ok=true;
+            } catch (e) {
+              meta.ok=false;
+              meta.error=String(e?.stack||e);
+              try { await page.screenshot({path:`legacy/browser/${target.name}-error.png`,fullPage:true}); } catch {}
+            }
+            meta.logs=logs;
+            meta.requests=requests;
+            meta.savedAssets=savedAssets;
+            manifest.push(meta);
+            fs.writeFileSync(`legacy/browser/${target.name}.json`,JSON.stringify(meta,null,2));
+            await page.close();
+          }
+          fs.writeFileSync('legacy/manifest.json',JSON.stringify(manifest,null,2));
+          await browser.close();
+          JS
+          node recover-legacy.mjs
+
+      - name: Upload recovered legacy pages
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: touchline-pre-v20-recovery
+          path: legacy/**
+          if-no-files-found: error
+          retention-days: 14
