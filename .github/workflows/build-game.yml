@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'payload/v22.txt'
+      - 'payload/v22-*.txt'
       - '.github/workflows/build-game.yml'
   workflow_dispatch:
 
@@ -22,7 +22,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tr -d '\r\n' < payload/v22.txt \
+          cat \
+            payload/v22-00.txt \
+            payload/v22-01.txt \
+            payload/v22-02.txt \
+            payload/v22-03.txt \
+            payload/v22-04.txt \
+            payload/v22-05.txt \
+            | tr -d '\r\n' \
             | base64 --decode \
             | gzip --decompress \
             > index.html
